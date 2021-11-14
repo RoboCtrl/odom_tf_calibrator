@@ -1,0 +1,15 @@
+<launch>
+	<!-- This is an example launch file for the Thorvald mobile robot platform. this launch file starts the calibration node and the static tf publisher. -->
+
+	<!-- static transformations to the 'map' frame for the published odometry topics from the ego-motion estimater above. needed for visualization only -->
+	<node pkg="tf" type="static_transform_publisher" name="tf_pub_back_odom"
+			args="0 0 0  0 0 0  map odom_back_scan  1000" />
+
+	<node pkg="tf" type="static_transform_publisher" name="tf_pub_front_odom"
+		args="0 0 0  0 0 0  map odom_front_scan  1000" />
+	
+	
+	<!-- actual calibration node. default parameters work with standard thorvald platform. -->
+	<node pkg="odom_tf_calibrator" type="odom_calibrate_2d" name="lrf_calibrator" />
+
+</launch>
