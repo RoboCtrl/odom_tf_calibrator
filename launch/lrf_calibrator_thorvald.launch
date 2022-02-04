@@ -2,6 +2,6 @@
 	<!-- This is an example launch file for the Thorvald mobile robot platform. this launch file starts the calibration node and the static tf publisher. -->
 
 	<!-- the calibration node. default parameters work with standard thorvald platform. -->
-	<node pkg="odom_tf_calibrator" type="odom_calibrate_2d" name="lrf_calibrator" />
+	<node pkg="odom_tf_calibrator" type="odom_calibrate_2d.py" name="lrf_calibrator" />
 
 </launch>
