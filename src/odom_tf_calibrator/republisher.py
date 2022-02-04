@@ -29,7 +29,7 @@ class Republisher( object ):
         print( 'republisher up and running' )
     
     def update_tf( self, params ):
-        """ the method allows to update the transformation parameters.
+        """ the method is called externaly (e.g. after an optimization run) to update the transformations.
            params is a 1d array containg the x,y,t transformation parameters for each sensor, e.g. for two sensors (x1,y1,t1, x2,y2,t2) """
         self.params = params
     

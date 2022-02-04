@@ -58,6 +58,9 @@ class CalibratorNode( object ):
         self.keyframes = dict()
         self.init_done = False
         self.optimizer = Optimizer()
+        self.num_opt_iterations = 2 # number of optimization runs with weighted datapoints
+        self.num_opt_step_size = 16 # we start the optimization first when we reach this many keyframes and re-run optimization for every multiple of this
+        self.max_opt_keyframes = 64 # we stop collecting keyframes / optimization whe we have more than this many keyframes
         self.initial_guess = (0., 0., 0., 0., 0., 0.) # initial guess: x1, y1, theta1, x2, y2, theta2 (two sensors)
         self.save_data = None
         self.save_at = 200
@@ -99,7 +102,6 @@ class CalibratorNode( object ):
             if arg.startswith('save_at='):
                 self.save_at = int(arg[8:])
                 
-        
     def odom_callback( self, topic, msg ):
         """ callback method for odometry messages. """
         xyt = odom_to_xyt( msg )
@@ -136,42 +138,36 @@ class CalibratorNode( object ):
             self.create_keyframe()
     
     def create_keyframe( self ):
-        """ creates a new keyframe for all registered odometry sources """
+        """ creates a new keyframe for all registered odometry sources. initiates optimization run if number of keyframes
+        is multiple of self.num_opt_step_size """
         for key in self.odom_latest:
             self.keyframes[key].append( self.odom_latest[key] )
             
         num_keyframes = len( self.keyframes[ self.odom_list[0] ] )
-        #if num_keyframes == 10 or num_keyframes == 20 or num_keyframes == 40 or num_keyframes == 80:
-        #if num_keyframes == 200:
-        if num_keyframes % 5 == 0 and num_keyframes <= 40:
+        if num_keyframes % self.num_opt_step_size == 0 and num_keyframes <= self.max_opt_keyframes:
             new_thread = Thread( target=self.optimize )
             new_thread.start()
-            #self.optimize()
-        if num_keyframes == self.save_at:
+        if num_keyframes >= self.max_opt_keyframes:
             for sub in self.subscribers:
                 sub.unregister()
             self.subscribers = []
             print( 'calibartion finished, continueing to re-publish scans and tf' )
-        #    rospy.signal_shutdown( 'calibratioerror_statsn finished' )
-        if self.save_data and num_keyframes == self.save_at:
-            self.save_data_async()
     
     def optimize( self ):
         """ starts the optimization process. we first run the optimization process, then computes individual weights,
         and runs the optimization process again. """
         data = self.create_data()
-        #if self.save_data:
-        #    self.save_data_async( data )
-        #initial_guess = (0.2, -0.15, 15.0/180.0*pi)
+        
+        # initial optimization run
         initial_guess = self.initial_guess
         opt = Optimizer()
         result = opt.optimize( data, initial_guess, self.odom_list )
-#        opt.log_error( data, result )
-        self.initial_guess = result.x
-        self.republisher.update_tf( result.x )
-        opt.compute_weights( data, result.x )
-        result = opt.optimize( data, initial_guess, self.odom_list )
-#        opt.log_error( data, result )
+        
+        # optimization loop with weighted datapoints
+        for i in range(self.num_opt_iterations):
+            self.initial_guess = result.x
+            opt.compute_weights( data, result.x )
+            result = opt.optimize( data, initial_guess, self.odom_list )
         self.initial_guess = result.x
         self.republisher.update_tf( result.x )
         #print( result )
