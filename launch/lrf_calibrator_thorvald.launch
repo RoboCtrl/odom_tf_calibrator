@@ -9,7 +9,7 @@
 		args="0 0 0  0 0 0  map odom_front_scan  1000" />
 	
 	
-	<!-- actual calibration node. default parameters work with standard thorvald platform. -->
-	<node pkg="odom_tf_calibrator" type="odom_calibrate_2d" name="lrf_calibrator" />
+	<!-- actual calibration node. default parameters work with standard thorvald platform. 
+	<node pkg="odom_tf_calibrator" type="odom_calibrate_2d" name="lrf_calibrator" output="screen" />-->
 
 </launch>

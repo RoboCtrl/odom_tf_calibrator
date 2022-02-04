@@ -20,12 +20,12 @@ def fix_rad_range( rad ):
 
 
 class Optimizer( object ):
-    """ The Optimizer class tries to find the correct transformation between sensors. The first sensor acts as base line and all other sensors
+    """ The Optimizer class tries to find the correct transformation between sensors. The first sensor acts as base link and all other sensors
     are aligned to it """
     def __init__( self ):
         #self.sensors = sensors
         self.log_filename = '/home/johann/rasberry_ws/src/local_testing/log/calib.txt'
-        pass
+        self.verbose = False
     
     def xyt_loss( self, xyt_a, xyt_b):
         """ computes the error between two transformations, provided via x/y/theta parameters. we return the sum of square errors """
@@ -125,7 +125,8 @@ class Optimizer( object ):
         ref_data = data[self.topics[0]] # data from the reference sensor
         data_length = len( ref_data )
         num_sensors = len(self.topics)
-        print( 'compute_errors: data_length={}, num_sensors={}'.format( data_length, num_sensors ) )
+        if self.verbose:
+            print( 'compute_errors: data_length={}, num_sensors={}'.format( data_length, num_sensors ) )
         for i in range(1, num_sensors):   # iterate over all sensors, except the first one (which acts as reference point for all other sensors)
             errors = []
             #offset = TF2d.from_xyt( *param[i-1] )
@@ -140,6 +141,17 @@ class Optimizer( object ):
                 errors.append( self.xyt_loss(base_xyt, sensor_xyt) )
             all_errors[self.topics[i]] = errors
         return all_errors
+    
+    def norm_errors( self, data, x ):
+        """ computes the normalized error for each sensor """
+        errors = self.compute_errors( data, x )
+        result = dict()
+        for sensor in errors:
+            result[sensor] = 0.0
+            for e in errors[sensor]:
+                result[sensor] += e
+            result[sensor] = result[sensor] / len(errors[sensor])
+        return result
     
     def error_stats( self, error ):
         """ returns min, max, median, mean value of the provided list """
@@ -156,9 +168,18 @@ class Optimizer( object ):
         self.topics = topics
         result = minimize( fun=self.fun, x0=initial_guess, args=(data) )
         #print( 'result={}'.format( result ) )
-        self.print_result( data, initial_guess, topics, result )
+        if self.verbose:
+            self.print_result( data, initial_guess, topics, result )
         #self.log_error( data, result )
         return result
+    
+    def optimize2( self, data, initial_guess, topics, num_iterations=3 ):
+        """ runs optimize in a short loop, updating initial_guess and recomputing weights during each iteration """
+        for i in range(num_iterations-1):# -1, beacuse we run optimize once after the loop as well
+            result = self.optimize( data, initial_guess, topics )
+            initial_guess = result.x
+            self.compute_weights( data, result.x )
+        return self.optimize( data, initial_guess, topics )
     
     def print_result( self, data, initial_guess, topics, result ):
         print( '~~ optimizer ~~~~~~' )
@@ -169,9 +190,11 @@ class Optimizer( object ):
             offset = 3*(i-1)
             print( '    initial guess={}'.format(initial_guess[offset:offset+3]) )
             print( '    final estimate={}'.format(result.x[offset:offset+3]) )
-        print( '~~~~~~~~~~~~~~~~~~~' )
+        print( 'errors:' )
+        errors = self.norm_errors( data, result.x )
+        print( errors )
         #print( result )
-        #print( '~~~~~~~~~~~~~~~~~~~' )
+        print( '~~~~~~~~~~~~~~~~~~~' )
 
 
 if __name__ == '__main__':
