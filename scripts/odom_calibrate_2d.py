@@ -8,7 +8,7 @@ from math import pi, sqrt
 from functools import partial
 from threading import Thread
 
-from ff_tf.tf2d import TF2d
+from odom_tf_calibrator.tf2d import TF2d
 from odom_tf_calibrator.optimizer import Optimizer
 from odom_tf_calibrator.republisher import Republisher
 from odom_tf_calibrator.datapoint import DataPoint
