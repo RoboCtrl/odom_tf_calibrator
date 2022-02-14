@@ -26,7 +26,7 @@ def chunks( lst, n ):
         yield lst[i:i + n]
 
 
-def odom_to_xyt( msg ):
+def odom_to_xyt_default( msg ):
     """ takes an Odometry message and return x,y, and theta (yaw angle)"""
     pose = msg.pose.pose
     x = pose.position.x
@@ -37,11 +37,28 @@ def odom_to_xyt( msg ):
     return x, y, theta
 
 
+def odom_to_xyt_viso2( msg ):
+    """ takes an Odometry message and return x,y, and theta (yaw angle)"""
+    pose = msg.pose.pose
+    #x = pose.position.x
+    #y = pose.position.z
+    x = pose.position.z
+    y = pose.position.x
+    o = pose.orientation
+    (roll, pitch, yaw) = euler_from_quaternion( [o.x, o.y, o.z, o.w] )
+    theta = pitch
+    return x, y, theta
+
+
+def odom_to_xyt( msg ):
+    return odom_to_xyt_viso2( msg )
+
+
 def fix_rad_range( rad ):
-    """ trims the angle back to [pi, -pi]. only works with moderate values. """
-    if rad > pi:
+    """ trims the angle back to [pi, -pi] """
+    while rad > pi:
         rad -= 2.0*pi
-    if rad < -1.0*pi:
+    while rad < -1.0*pi:
         rad += 2.0*pi
     return rad
 
@@ -54,8 +71,12 @@ class CalibratorNode( object ):
         rospy.init_node( 'sensor_calibrator', anonymous=False )
         print( 'sys.argv={}'.format(sys.argv)  )
         #self.odom_list = [ 'odom', 'sensor_odom' ]
-        self.odom_list = [ 'odometry/base_raw', 'odom_front_scan', 'odom_back_scan' ] # overwritten by self.apply_params!
-        self.republisher = Republisher( ['/scanner_front/scan', '/scanner_back/scan'] ) #order must match self.odom_list, ignoring the reference odometry
+        if False: # thorvald
+            self.odom_list = [ 'odometry/base_raw', 'odom_front_scan', 'odom_back_scan' ] # overwritten by self.apply_params!
+            self.republisher = Republisher( ['/scanner_front/scan', '/scanner_back/scan'] ) #order must match self.odom_list, ignoring the reference odometry
+        else: # kitti
+            self.odom_list = [ 'mono_odometer_gray_left/odometry', 'mono_odometer_gray_right/odometry' ]
+            self.republisher = None
         self.odom_latest = dict()
         self.keyframes = dict()
         self.init_done = False
@@ -91,6 +112,9 @@ class CalibratorNode( object ):
         #self.ref_odom = rospy.get_param( '~reference_odom', 'odometry' )
         topic_list = rospy.get_param( '~odom_topics', 'odometry/base_raw,odom_front_scan,odom_back_scan' )
         odom_topics = topic_list.split( ',' )
+        
+        odom_topics = self.odom_list
+        
         self.ref_odom = odom_topics[0]
         self.odom_list = odom_topics
     
@@ -180,7 +204,8 @@ class CalibratorNode( object ):
         result = opt.optimize( data, initial_guess, self.odom_list )
 #        opt.log_error( data, result )
         self.initial_guess = result.x
-        self.republisher.update_tf( result.x )
+        if self.republisher:
+            self.republisher.update_tf( result.x )
         #print( result )
         return result
     

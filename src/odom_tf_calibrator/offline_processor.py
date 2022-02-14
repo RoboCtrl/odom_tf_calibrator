@@ -46,6 +46,7 @@ class Offline( object ):
             errors[i].append( abs(x[i]-self.gt[i]) )
     
     def error_stats( self, errors ):
+        """ computes the mean, median, ... for each list of errors in 'errors'. returns a list of dictionaries with the computed values """
         result = []
         for i in range(6):
             s_err = sorted( errors[i] )
@@ -62,24 +63,31 @@ class Offline( object ):
         return result
         
     
-    def run( self, data=None, iterations=3 ):
+    def run( self, data=None, iterations=3, keys=('odometry+base_raw', 'odom_front_scan', 'odom_back_scan'), initial_guess=None ):
+        """ runs the optimization for 'iterations' times on 'data', weighting the data points andcarrying over
+        the result from the previous run as initial guess in the next iteration.
+        returns the scipy.optimize.OptimizeResult object of the last optimization run """
         if not data:
             data = self.create_data()
+        if not initial_guess:
+            initial_guess = []
+            for i in range(1,len(data.keys())):
+                initial_guess.append( 0.0 )
+                initial_guess.append( 0.0 )
+                initial_guess.append( 0.0 )
+            
         opt = Optimizer()
-        initial_guess = (0., 0., 0., 0., 0., 0.)
-        keys = ('odometry+base_raw', 'odom_front_scan', 'odom_back_scan')
         for k in range(iterations-1):
-            #print( 'iteration #{}'.format(k) )
             result = opt.optimize( data, initial_guess, keys )
             initial_guess = result.x
             opt.compute_weights( data, result.x )
-        #print( 'iteration #{}'.format(iterations-1) )
         result = opt.optimize( data, initial_guess, keys )
         #self.result_to_csv( data, result, opt )
         return result
     
-    def run_2( self, batch_size=24, inc=4 ):
-        """ sliding window in data """
+    def run_2( self, batch_size=24, inc=4, iterations=3 ):
+        """ sliding window in data.
+        returns a list of scipy.optimize.OptimizeResult objects, one for each computed batch slice size. """
         data = self.create_data()
         size = len( data[data.keys()[0]] )
         start = 0
@@ -92,7 +100,7 @@ class Offline( object ):
                 print( 'break condition met' )
                 break
             subset = self.create_data_subset( data, range(start, stop) )
-            results.append( self.run(subset) )
+            results.append( self.run(subset, iterations) )
         return results
     
     def run_2_random( self, batch_size=24, num_runs=4 ):
@@ -105,7 +113,7 @@ class Offline( object ):
         return results
     
     def run_2_sim( self, batch_size=16, errors=([],[],[],[],[],[],[]) ):
-        """ sliding window in data, ground truth used to compute errors """
+        """ sliding window in data, ground truth used to compute errors. returns the errors """
         data = self.create_data()
         size = len( data[data.keys()[0]] )
         start = 0
@@ -124,7 +132,7 @@ class Offline( object ):
             result = self.run( subset )
             x = result.x
             self.compute_error( x, errors )
-        self.error_stats( errors )
+        self.error_stats( errors ) # prints to console, does not modify errors
         return errors
     
     def run_3( self ):
@@ -234,6 +242,7 @@ class Offline( object ):
     
     def outlier_fix( self, data ):
         """ removes any keyframes where any of the translational movements exceeds 1.5m """
+        max_dist = 2.5
         size = len( data[data.keys()[0]] )
         num_outliers = 0
         outlier = False
@@ -245,7 +254,7 @@ class Offline( object ):
             outlier = False
             for k in keys:
                 d = data[k][i]
-                if abs(d[0]) > 1.5  or  abs(d[1]) > 1.5:
+                if abs(d[0]) > max_dist  or  abs(d[1]) > max_dist:
                     outlier = True
                     break
             if outlier:
