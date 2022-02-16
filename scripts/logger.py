@@ -16,15 +16,20 @@ import rospy
 
 
 
-path = ''
-skip = 2
+path = '' # storage path, set in setup()
+skip = 0
 
 
 
 def setup():
     global path
     date_string = time.strftime( '%Y-%m-%d__%X' )
-    path = '/opt/shared/uol/data/sensor_calibration/kitti_viso2/' + date_string + '/'
+    env_path =  os.environ['UOL_DATA_PATH']
+    if env_path:
+        path = env_path + 'sensor_calibration/kitti_combined/'
+    else:
+        path = '/opt/shared/uol/data/sensor_calibration/kitti_combined/'
+    path = path + date_string + '/'
     #path = '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/' + date_string + '/'
     print( 'saving data to \'{}\''.format(path) )
     if not os.path.exists( path ):

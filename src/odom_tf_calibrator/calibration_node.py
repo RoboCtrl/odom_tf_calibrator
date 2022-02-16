@@ -70,16 +70,12 @@ class CalibratorNode( object ):
     def __init__( self ):
         rospy.init_node( 'sensor_calibrator', anonymous=False )
         print( 'sys.argv={}'.format(sys.argv)  )
-        #self.odom_list = [ 'odom', 'sensor_odom' ]
-        if False: # thorvald
-            self.odom_list = [ 'odometry/base_raw', 'odom_front_scan', 'odom_back_scan' ] # overwritten by self.apply_params!
-            self.republisher = Republisher( ['/scanner_front/scan', '/scanner_back/scan'] ) #order must match self.odom_list, ignoring the reference odometry
-        else: # kitti
-            self.odom_list = [ 'mono_odometer_gray_left/odometry', 'mono_odometer_gray_right/odometry' ]
-            self.republisher = None
+        self.odom_list = [] # list of topic names, filled via self.apply_params()
         self.odom_latest = dict()
         self.keyframes = dict()
         self.init_done = False
+        self.kf_min_dist = 0.5
+        self.kf_min_angle = pi*35.0/180.0
         self.optimizer = Optimizer()
         self.initial_guess = (0., 0., 0., 0., 0., 0.) # initial guess: x1, y1, theta1, x2, y2, theta2 (two sensors)
         self.max_keyframes = 10000
@@ -88,7 +84,6 @@ class CalibratorNode( object ):
         self.ref_odom = None # set by self.apply_params
         self.keyframe_callback = None # callback function that is called after every new keyframe. not that it is only called once per keyframe, independ of the number of sensors
         self.subscribers = []
-        self.odom_topics = []
         self.apply_params()
         self.read_args()
         self.subscribe()
@@ -105,18 +100,22 @@ class CalibratorNode( object ):
     
     def apply_params( self ):
         """ reads parameters and applies them immediately. unlike self.read_args, this method focuses on ros parameters and not command line parameters. """
-        #if not rospy.has_param( '~odom_topics' ):
-        #    rospy.logerr( 'mandatory parameter \'odom_topics\' not set. (example value: \'sensor_a_odom,sensor_b_odom,sensor_c_odom\')' )
-        #    rospy.signal_shutdown( 'error - shutting down node' )
-        #    exit( 0 )
-        #self.ref_odom = rospy.get_param( '~reference_odom', 'odometry' )
+        value = rospy.get_param( '~republish', 'odometry/base_raw,odom_front_scan,odom_back_scan' )
+        if not rospy.has_param( '~odom_topics' ):
+            if False: # thorvald
+                self.odom_list = [ 'odometry/base_raw', 'odom_front_scan', 'odom_back_scan' ] # overwritten by self.apply_params!
+                self.republisher = Republisher( ['/scanner_front/scan', '/scanner_back/scan'] ) #order must match self.odom_list, ignoring the reference odometry
+                return
+            else: # kitti, gray cameras
+                self.odom_list = [ 'mono_odometer_gray_left/odometry', 'mono_odometer_gray_right/odometry' ]
+                self.republisher = None
+                return
         topic_list = rospy.get_param( '~odom_topics', 'odometry/base_raw,odom_front_scan,odom_back_scan' )
         odom_topics = topic_list.split( ',' )
-        
-        odom_topics = self.odom_list
-        
         self.ref_odom = odom_topics[0]
         self.odom_list = odom_topics
+        if value.lower() in [ 'true', '1', True ]:
+            self.republisher = Republisher( self.odom_list[1:] )
     
     def read_args( self ):
         """ reads command line arguments and applies them """
@@ -126,8 +125,7 @@ class CalibratorNode( object ):
                 self.save_data = arg[5:]
             if arg.startswith('save_at='):
                 self.save_at = int(arg[8:])
-                
-        
+    
     def odom_callback( self, topic, msg ):
         """ callback method for odometry messages. """
         xyt = odom_to_xyt( msg )
@@ -158,7 +156,7 @@ class CalibratorNode( object ):
         dy = xyt[1] - odom[1]
         dt = fix_rad_range( xyt[2] - odom[2] )
         dist = sqrt( dx*dx + dy*dy )
-        if dist > 0.3 or dt > pi*35.0/180.0:    # 0.3m traveled (line of sight) or 35 degree bearing change
+        if dist > self.kf_min_dist or dt > self.kf_min_angle:    # min-distance traveled (line of sight) or min-angle bearing change
             #num_keyframes = len( self.keyframes[ self.odom_list[0] ] )
             #print( 'keyframe #{} dist={}, dt={}'.format(num_keyframes, dist, dt) )
             self.create_keyframe()

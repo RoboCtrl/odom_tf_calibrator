@@ -135,23 +135,6 @@ class Offline( object ):
         self.error_stats( errors ) # prints to console, does not modify errors
         return errors
     
-    def run_3( self ):
-        """ sliding window in data """
-        data = self.create_data()
-        size = len( data[data.keys()[0]] )
-        inc = 5
-        start = 0
-        stop = 0
-        while True:
-            stop = stop + inc
-            if stop >= size:
-                break
-            if stop > 100:
-                print( 'break condition met' )
-                break
-            subset = self.create_data_subset( data, range(start, stop) )
-            self.run( subset )
-    
     def result_to_csv( self, data, result, opt ):
         """ result (x,y,t)x2,  result error (ex,ey,et)x2, norm_error (ne)x2, data_length """
         x = result.x
@@ -241,7 +224,8 @@ class Offline( object ):
         return self.outlier_fix( data )
     
     def outlier_fix( self, data ):
-        """ removes any keyframes where any of the translational movements exceeds 1.5m """
+        """ removes any keyframes where any of the translational movements exceeds 1.5m
+        note: this doesn't work reliable for visual odometry where the scale is not fixed """
         max_dist = 2.5
         size = len( data[data.keys()[0]] )
         num_outliers = 0

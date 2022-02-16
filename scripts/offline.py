@@ -22,12 +22,18 @@ class TestRuns( object ):
     def __init__( self ):
         pass
     
-    def write_result( self, csv, result, source_id ):
+    def write_result( self, csv, result, batch_size=0, source_id=0 ):
         for r in result:
             x = r.x
             csv.write_raw( '{} {} {} {} {} {} {} {}\n'.format(batch_size, x[0], x[1], x[2], x[3], x[4], x[5], source_id) )
     
     def run( self, sources, batches, window_shift=8, csv=None ):
+        """ runs the optimization process on a dataset in batches
+        parameters:
+            sources: list of directories that contained pickled keyframes
+            batches: list or similar object that determines the batch sizes
+            window_shift: positive integer that determines how much the batch window shifts after each optimization run
+            csv: [optional] a CSV object where we save the results. can be 'None' if we don't need to save the results """
         for batch_size in batches:
             time_start = time.time()
             source_id = 0
@@ -36,16 +42,24 @@ class TestRuns( object ):
                 offline = Offline( path )
                 result = offline.run_2( batch_size=batch_size, inc=window_shift )
                 if csv:
-                    self.write_result( csv, result,source_id)
+                    self.write_result( csv, result, batch_size, source_id )
                 source_id += 1
             time_spend = time.time() - time_start
             print( '  time spent: {:.1%}s'.format(time_spend) )
     
     def thorvald_25_farm( self ):
+        """ for the odom_farm dataset """
         path = '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/odom_farm/'
         csv = CSV( 'odom_farm_16_256.csv', '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/' )
 
         self.run( [path], range(16, 257, 16), csv=csv )
+        
+    def thorvald_25_outdoor_small( self ):
+        """ for the odom_outdoor_small & odom_outdoor_small2 datasets """
+        path = '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/'
+        sources = [ path+'odom_outdoor_small/', path+'odom_outdoor_small/2' ]
+        csv = CSV( 'odom_small_16_128.csv', '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/' )
+        self.run( sources, range(16, 129, 16), csv=csv )
         
 
 
@@ -90,31 +104,6 @@ def sim_batch():
     return  error_stats
 
 
-def thorvald_025():
-    path = '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/odom_farm/'
-    all_results = []
-    csv = CSV( 'odom_farm_16_256_no_outlier_removal.csv', '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/' )
-    num_opt_iterations = 1
-    for batch_size in range(16, 257, 16):
-        print( 'batch_size={}'.format(batch_size) )
-        offline = Offline( path )
-        result = offline.run_2( batch_size=batch_size, inc=8, iterations=num_opt_iterations )
-        all_results.append( (batch_size, result) )
-    print( '--------' )
-    for entry in all_results:
-        batch = entry[1]
-        print( 'batch_size={} ({})'.format( entry[0], len(batch) ) )
-        for result in batch:
-            print( 'x={}'.format(result.x) )
-    print( '------------------------------' )
-    for entry in all_results:
-        batch_size = entry[0]
-        batch = entry[1]
-        for result in batch:
-            x = result.x
-            print( '{} {} {} {} {} {} {}'.format(batch_size, x[0], x[1], x[2], x[3], x[4], x[5]) )
-            csv.write_raw( '{} {} {} {} {} {} {}\n'.format(batch_size, x[0], x[1], x[2], x[3], x[4], x[5]) )
-    print( '------------------------------' )
         
 def thorvald_025_random_subsets():
     path = '/opt/shared/uol/data/sensor_calibration/thorvald_025/riseholme/odom_farm/'
@@ -150,6 +139,7 @@ def kitti_test():
     path = '/opt/shared/uol/data/sensor_calibration/kitti_viso2/2022-02-13__20:59:55/'
     offline = Offline( path )
     result = offline.run(keys=('mono_odometer_gray_left+odometry', 'mono_odometer_gray_right+odometry'))
+    # note: result is out of scale, but otherwise plausible
     print( result )
 
 
@@ -161,29 +151,6 @@ if __name__ == '__main__':
     #thorvald_025_random_subsets()
     #thorvald_025()
     testrun = TestRuns()
-    testrun.thorvald_25_farm()
+    testrun.thorvald_25_outdoor_small()
     
-    
-    if False:
-        data_folder = '/opt/shared/uol/data/sensor_calibration/sim/' + '2022-01-26__21:20:10' + '/'
-        data_folder_2 = '/opt/shared/uol/data/sensor_calibration/sim/' + '2022-01-26__22:53:57' + '/'
-        #csv = CSV( path='', filename='combined_sim_error_stats.csv' )
-        #csv.write_raw( '# num_keyframes, ( mean,  median,  var,  sigma,  min,  max ) x 6 \n' )
-        for batch_size in (16, 24, 32, 48, 64, 96, 128):
-            print( '== batch size: {} =='.format(batch_size) )
-            offline = Offline( data_folder )
-            errors = offline.run_2_sim( batch_size=batch_size )
-            
-            offline2 = Offline( data_folder_2 )
-            errors2 = offline2.run_2_sim( batch_size=batch_size )
-            
-            errors_combined = []
-            for i in range(len(errors)):
-                errors_combined.append( errors[i] + errors2[i] )
-            
-            print( 'combined error stats:' )
-            error_stats = offline2.error_stats( errors_combined )
-            #line = [batch_size] + error_stats[0] + error_stats[1] + error_stats[2] + error_stats[3] + error_stats[4] + error_stats[5]
-            #csv.write( line )
-        #csv.close()
 
